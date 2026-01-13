@@ -1,0 +1,10 @@
+*.aux
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.fdb_latexmk
+ent.exe
+*.gz
