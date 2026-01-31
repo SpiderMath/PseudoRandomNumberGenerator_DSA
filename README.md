@@ -5,7 +5,7 @@ This project is my submission for the assignment of implementing the quicksort a
 Admittedly, `C` is not quite my forte when it comes to working in implementing stuff in multiple files, hence I had a lot of fun adding this as an additional challenge. 🙃
 
 ### Interface Demo
-![Interface Demo](./DemonstrationVideo.mp4)
+![Interface Demo](./DemonstrationVideo.gif)
 
 ## How It Works
 1. **Selection:** The user selects one of three PRNG algorithms via the CLI.
