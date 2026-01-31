@@ -1,61 +1,50 @@
-#ifndef PSEUDO_RNG_H
-#define PSEUDO_RNG_H
+#ifndef PSEUDORNG_H
+#define PSEUDORNG_H
 
 #include <stdint.h>
 
-#define SEED_DEFAULT 1234
+/**
+ * @param state A pointer to the current state (seed) of the generator 
+ * The function updates this value for the next call
+ * @return The generated pseudo-random 32-bit integer
+ */
+uint32_t lcg_rand(uint32_t *state);
 
-// LINEAR CONGRUENTIAL GENERATORS
-// Apparently if it's not ULL then it throws a tantrum
-// ULL means unsigned long long
-#define LCG_DEFAULT_A 6364136223846793005ULL
-#define LCG_DEFAULT_C 1442695040888963407ULL
+/**
+ * @param state A pointer to the current state (seed) of the generator
+ * The function updates this value for the next call
+ * Note: This algorithm can possibly go to zero if the seed is not chosen carefully
+ * @return The generated pseudo-random 32-bit integer
+ */
+uint32_t middle_square_rand(uint32_t *state);
 
-// Macros for Linear Congruential Generator initialisation
-extern void __lcg_init(uint64_t seed, uint64_t param_a, uint64_t param_c);
+/*
+ * EXPANDER GRAPH PRNG
+ * Based on Arnold's Cat Map and Xorshift.
+ * State Space: 2^64 (represented as a 2D grid of 2^32 x 2^32).
+ * Period: ~2^64 (Hopefully? Results from testing the first 2^14 outputs on 500 seeds seems promising till now)
+ */
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+} ExpanderPRNG;
 
-#define GET_LCG_MACRO(_1, _2, _3, NAME, ...) NAME
+/**
+ * @brief Initializes the PRNG state
+ * @param ctx Pointer to the PRNG context structure
+ * @param seed A 64-bit seed value
+ * (Note: If you set seed 0, it'll change it to what I've hard-coded)
+ */
+void prng_init(ExpanderPRNG *ctx, uint64_t seed);
 
-#define lcg_init(...) GET_LCG_MACRO(__VA_ARGS__, lcg_init4, lcg_init3, lcg_init2, lcg_init1)(__VA_ARGS__)
+/**
+ * @brief Advances the state and returns the next pseudo-random number
+ * Steps:
+ * 1. Applies Arnold's Cat 🐈 for Expansion
+ * 2. Applies XOR-Rotation for Non-linearity and unpredictability
+ * @param ctx Pointer to the PRNG context structure
+ * @return uint64_t A 64-bit pseudo-random number
+ */
+uint64_t prng_next(ExpanderPRNG *ctx);
 
-// Case 1: user provides nothing
-#define lcg_init1() __lcg_init(SEED_DEFAULT, LCG_DEFAULT_A, LCG_DEFAULT_C)
-// Case 2: user provides only seed
-#define lcg_init2(seed) __lcg_init(seed, LCG_DEFAULT_A, LCG_DEFAULT_C)
-// Case 3: user provides seed, A => Use default C
-#define lcg_init3(seed, a) __lcg_init(seed, a, LCG_DEFAULT_C)
-// Case 4: user provides everything (surprising) => Pass it all through
-#define lcg_init4(seed, a, c) __lcg_init(seed, a, c)
-
-// LCG Next function
-uint64_t lcg_next();
-
-// MIDDLE SQUARE
-extern void __msm_init(uint64_t seed);
-
-#define GET_MSM_MACRO(_1, NAME, ...) NAME
-
-#define msm_init(...) GET_MSM_MACRO(__VA_ARGS__, msm_init2, msm_init1)(__VA_ARGS__)
-
-// Case 1: user provided nothing
-#define msm_init1() __msm_init(SEED_DEFAULT)
-// Case 2: user provided seed
-#define msm_init2(seed) __msm_init(seed)
-
-// MSM Next function
-uint64_t msm_next();
-
-// CUSTOM PRNG
-extern void __custom_prng_init(uint64_t seed);
-
-#define GET_CUSTOM_PRNG_MACRO(_1, _2, _3, NAME, ...) NAME
-
-#define custom_prng_init(...) GET_CUSTOM_PRNG_MACRO(__VA_ARGS__, custom_prng_init2, custom_prng_init1)(__VA_ARGS__)
-
-// Case 1: user provided nothing
-#define custom_prng_init1() __custom_prng_init(SEED_DEFAULT)
-// Case 2: user provided seed
-#define custom_prng_init2(seed) __custom_prng_init(seed)
-
-uint64_t custom_prng_next();
 #endif

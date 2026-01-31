@@ -5,68 +5,74 @@ typedef uint32_t u32;
 
 // ----------- IMPLEMENTATION OF LINEAR CONGRUENTIAL GENERATOR -----------
 
-static u64 lcg_state;
-static u64 a;
-static u64 c;
+u32 lcg_rand(u32 *state) {
+    u32 a = 1664525;
+    u32 c = 1013904223;
 
-void __lcg_init(u64 seed, u64 param_a, u64 param_c) {
-    lcg_state = seed;
-    a = param_a;
-    c = param_c;
-}
+    *state = (a * (*state) + c);
 
-u64 lcg_next() {
-    lcg_state = (a * lcg_state) + c;
-
-    return lcg_state;
+    return *state;
 }
 
 // ----------- IMPLEMENTATION OF MIDDLE SQUARE METHOD -----------
 
-static u64 msm_state;
+u32 middle_square_rand(u32 *state) {
+    u64 square = (u64)(*state) * (u64)(*state);
+    u64 middle = (square >> 16) & 0xFFFFFFFF;
 
-void __msm_init(u64 seed) {
-    msm_state = seed;
-}
+    *state = (u32)middle;
 
-u64 msm_next() {
-    msm_state = msm_state << 2;
+    return *state;
 }
 
 // ----------- IMPLEMENTATION OF THE EXPANDER GRAPH METHOD -----------
 
-static u32 g_x;
-static u32 g_y;
-static u64 g_lcg_state = 0;
-
-
-void __custom_prng_init(u64 seed, u64 gx, u64 gy) {
-    lcg_init(seed);
-    g_x = gx;
-    g_y = gy;
-    u64 start_pos = lcg_next();
-
-    g_x = (uint32_t)(start_pos >> 32);
-    g_y = (uint32_t)(start_pos & 0xFFFFFFFF);
+// Helper function to rotate the number
+static inline uint32_t rotl32(uint32_t x, int k) {
+    return (x << k) | (x >> (32 - k));
 }
 
+void prng_init(ExpanderPRNG *ctx, uint64_t seed) {
+    // We split the seed into two 32 bit numbers
+    ctx->x = (uint32_t)(seed & 0xFFFFFFFF);
+    ctx->y = (uint32_t)(seed >> 32);
 
-u64 custom_prng_next() {
-    // Take 3 steps on the graph to mix the LCG's output
-    for (int i = 0; i < 3; i++) {
-
-        // We use the LCG output AND our current position to decide.
-        u64 driver_input = lcg_next() ^ g_x ^ g_y;
-        int choice = driver_input & 3;
-
-        // Moving the Walker (Margulis Expander Transformations) [added +1 in case of reaching (x, y) = (0, 0)]
-        switch (choice) {
-            case 0: g_y = g_x + g_y + 1; break; // Move Up-Right skew
-            case 1: g_x = g_x + g_y + 1; break; // Move Right-Up skew
-            case 2: g_y = g_y - g_x + 1; break; // Move Down-Left skew
-            case 3: g_x = g_x - g_y + 1; break; // Move Left-Down skew
-        }
+    // The origin (0,0) is a fixed point in every linear transformation 
+    // If seed is 0, gotta bump it. The users are stupid ffs
+    if (ctx->x == 0 && ctx->y == 0) {
+        ctx->x = 0xDEADBEEF;
+        ctx->y = 0xCAFEBABE;
     }
+}
 
-    return ((u64)g_x << 32) | g_y;
+// The actual generator
+uint64_t prng_next(ExpanderPRNG *ctx) {
+    /*
+    1. THE EXPANDER STEP (Linear Mixing)
+        We apply Arnold's Cat Map transformation: 
+        | x_new |   | 2  1 |   | x_old |
+        | y_new | = | 1  1 | x | y_old | (mod 2^32)
+
+        This matrix has a determinant of 1, preserving area (bijective),
+        and eigenvalues != 1, ensuring exponential stretching.
+        And it goes really crazy really fast! (Chaotic Systems)
+
+        In code, we will do this via two shears for efficiency:
+            y = x + y
+            x = y_new + x = (x + y) + x = 2x + y
+    */
+    ctx->y = ctx->x + ctx->y;
+    ctx->x = ctx->x + ctx->y;
+
+    /*
+    2. Currying (NOT THE LAMBDA CALCULUS) the output
+        Pure linear maps fail statistical tests due to linearity.
+        Time to insert non-linearity using a Xorshift style rotation.
+        We mix x into y, and y into x.
+    */
+    ctx->x ^= rotl32(ctx->y, 7);
+    ctx->y ^= rotl32(ctx->x, 13);
+
+    // 3. Recombine to form a 64-bit output
+    return ((uint64_t)ctx->x << 32) | ctx->y;
 }
